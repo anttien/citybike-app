@@ -1,0 +1,280 @@
+<!DOCTYPE html> 
+<html> 
+    <head> 
+        <meta charset="utf-8" />
+		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"
+			integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+			crossorigin="anonymous"/>
+		<link rel="stylesheet" href="bikestation.css"/>
+        <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"
+			integrity="sha512-QVftwZFqvtRNi0ZyCtsznlKSWOStnDORoefr1enyq5mVL4tmKB3S/EnC3rRJcxCPavG10IcrVGSmPh6Qw5lwrg=="
+			crossorigin="anonymous"></script>
+		<title>Bike station app</title> 
+    </head> 
+    <body>		
+		<div id="map"></div>
+			<table id="options" class="optionsTable leaflet-control">
+			<tr>
+				<td>
+					<div class="styled-select blue semi-square">
+					<select id="citySelect" onchange="citySelectOnChangeFunction(this.value)">
+						<option selected >Choose a city</option>
+					</select>
+					</div>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<div class="styled-select blue semi-square">
+					<select id="stationSelect" onchange="stationSelectOnChangeFunction(this.value)">
+						<option value="" selected hidden >Choose a bike station</option>
+						<option value="" selected disabled>Choose a city first</option>
+					</select>
+					</div>
+				</td>
+			</tr>
+		</table>
+		
+		
+		<script>
+			var cities = [];  // Contains all the city objects 
+			var stations = []; // Contains all the station objects
+			var markers = []; // Contains all the marker objects			
+			initMap();
+			initCities("https://api.citybik.es/v2/networks/");
+			
+			// Add options controls on top of the map. Source: https://stackoverflow.com/questions/20790045/how-to-precisely-place-a-div-element-on-a-map-using-leaflet-js/38164780
+			var optionsTableElement = L.DomUtil.get("options");
+			var zones = [{element: optionsTableElement}];
+			var controlsContainer = map._container.getElementsByClassName("leaflet-control-container")[0],
+				firstCorner = controlsContainer.firstChild;
+			for (var i = 0; i < zones.length; i += 1) {
+				  setZone(zones[i]);
+				}
+			function setZone(zoneData) {
+				controlsContainer.insertBefore(zoneData.element, firstCorner);
+			}
+			
+			// Initialize the Leaflet map
+			function initMap() {
+				var mapdiv = document.getElementById('map');
+				map = L.map('map', {zoomControl: false}).setView([0, 0], 2);
+				L.control.zoom({
+					 position:'bottomleft'
+				}).addTo(map);
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', 
+				{attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', }).addTo(map);
+			}
+			
+			// Fetch cities from url and create HTML select object for them
+			function initCities(url) {
+				getCities(url);
+				createCitySelectObj(cities);
+			}
+			
+			// Fetch stations from city endpoint url, draw them to the map and create HTML select object for them
+			function initStations(url) {
+				getStations(url);
+				drawStationMarkersToMap();
+				createStationSelectObj();
+				zoomToIncludeMarkers();
+			}
+			
+			// Request all the available cities from api.citybik.es
+			function getCities(url) {			
+				var xmlhttp = new XMLHttpRequest();
+				xmlhttp.onreadystatechange = function() {    
+					if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {        
+						var citiesJson = JSON.parse(xmlhttp.responseText);        
+						parseCities(citiesJson);
+					} 
+				}
+				xmlhttp.open("GET", url, false); 
+				xmlhttp.send();
+			}
+			
+			// Put all the needed city information from JSON to objects and push to array
+			function parseCities(citiesJson) {	
+				for (element in citiesJson.networks) {
+					var city = {name:citiesJson.networks[element].location.city, 
+								country:citiesJson.networks[element].location.country,
+								long:citiesJson.networks[element].location.longitude,
+								lat:citiesJson.networks[element].location.latitude,
+								endpointUrl:citiesJson.networks[element].href};
+					cities.push(city);
+				}
+				cities.sort(compareByName);
+			}
+			
+			// Create HTML select object for cities
+			function createCitySelectObj(cities) {
+				var select = document.getElementById('citySelect');
+				for (city in cities) {
+					var option = document.createElement("option");
+					option.text = cities[city].name;
+					select.add(option);
+				}
+			}
+			
+			// The event listener of HTML city select object. If city is selected, fetch and show all the city's stations.
+			function citySelectOnChangeFunction(cityName) {
+				for (city in cities) {
+					if(cities[city].name === cityName) {
+						console.log(cityName + ', ' + cities[city].country);
+						removeMarkers();
+						initStations(cities[city].endpointUrl);
+						return;
+					}
+				}
+			}
+			
+			// The event listener of HTML station select object. If a station is selected, show more info of the station.
+			function stationSelectOnChangeFunction(stationName) {
+				for (station in stations) {
+					if(stations[station].name === stationName) {
+						var lat = stations[station].lat;
+						var long = stations[station].long;
+						popupMarkerInPosition(lat, long);
+						zoomToPosition(lat, long);
+						return;
+					}
+				}
+			}
+			
+			// Popups the marker in a position given in as a parameter
+			function popupMarkerInPosition(lat, long) {
+				for (marker in markers) {
+					if (markers[marker]._latlng.lat === lat && markers[marker]._latlng.lng === long) {
+						markers[marker].openPopup();
+					}
+				}
+			}
+			
+			// Remove all the markers from the map
+			function removeMarkers() {
+				for (marker in markers) {
+					map.removeLayer(markers[marker]);
+				}
+				markers = [];
+			}
+			
+			// Query all the stations from the chosen city's endpoint API
+			function getStations(url) {
+				console.log("drawStations(): endpointUrl: " + url);
+				var xmlhttp = new XMLHttpRequest();
+				xmlhttp.onreadystatechange = function() {    
+					if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {        
+						var stationsJson = JSON.parse(xmlhttp.responseText);        
+						parseStations(stationsJson);
+					} 
+				}
+				xmlhttp.open("GET", "https://api.citybik.es" + url, false); 
+				xmlhttp.send();
+			}
+			
+			// Put all the needed station information from JSON to objects and push them to array
+			function parseStations(stationsJson) {
+				stations = [];
+				var company = stationsJson.network.name;
+				for (station in stationsJson.network.stations) {
+					var long = stationsJson.network.stations[station].longitude;
+					var lat = stationsJson.network.stations[station].latitude;
+					var emptySlots = stationsJson.network.stations[station].empty_slots;
+					if (emptySlots === null) {
+						emptySlots = "N/A"
+					}
+					var freeBikes = stationsJson.network.stations[station].free_bikes;
+					var name;
+					if (typeof stationsJson.network.stations[station].extra.address === 'undefined') {
+						name = stationsJson.network.stations[station].name;
+					} else {
+						name = stationsJson.network.stations[station].extra.address;
+					}
+					
+					// Clean numbers and other unnecessary characters from the beginning of the name
+					name = name.replace(/(.*?)[^a-zA-Z]*/, '');
+					
+					var station = {name:name,
+								long:long,
+								lat:lat,
+								emptySlots:emptySlots,
+								freeBikes:freeBikes,
+								company:company};
+					stations.push(station);
+				}
+			}
+			
+			// Create HTML select object for stations
+			function createStationSelectObj() {
+				document.getElementById('stationSelect').innerHTML = "";
+				var select = document.getElementById('stationSelect');
+				var defaultOption = document.createElement("option");
+				select.add(defaultOption);
+				stations.sort(compareByName);
+				for (station in stations) {
+					var option = document.createElement("option");
+					option.text = stations[station].name;
+					select.add(option);
+				}
+				
+				if (stations.length === 0) {
+					defaultOption.text = "City doesn't currently have any stations";
+				} else {
+					defaultOption.text = "Choose a bike station";
+					defaultOption.setAttribute("hidden", "");
+				}
+				defaultOption.setAttribute("selected", "");
+			}
+			
+			// Draws all the stations as markers to the map
+			function drawStationMarkersToMap() {
+				for (station in stations) {
+					var marker = new L.marker([stations[station].lat, stations[station].long]);
+					var popup = L.popup({
+						closeOnClick:false,
+						autoClose:false
+					}).setContent("Name of station: " + stations[station].name + "<br>" + 
+									"Free bikes: " + stations[station].freeBikes + "<br>" +
+									"Empty slots: " + stations[station].emptySlots + "<br>" +
+									"Company: " + stations[station].company);
+					marker.bindPopup(popup);
+					marker.on('mouseover', function (e) {
+						this.openPopup();
+					});					
+					marker.on('mouseout', function (e) {
+						this.closePopup();
+					});
+					marker.on('click', function(e){
+						map.setView(e.latlng);
+					});
+					markers.push(marker);
+					map.addLayer(marker);
+				}
+			}
+			
+			// Zoom the view to include all the markers
+			function zoomToIncludeMarkers() {
+				var group = new L.featureGroup(markers);
+				map.fitBounds(group.getBounds());
+			}
+			
+			// Zoom the view to a position, zoom only if current zoom is larger
+			function zoomToPosition(lat, long) {
+				var zoom = Math.max(map.getZoom(), 15);
+				map.flyTo([lat, long], zoom);
+			}
+			
+			// Compare function to compare objects that contain the element 'name'
+			function compareByName(obj1,obj2) {
+				if (obj1.name < obj2.name) {
+					return -1;
+				}
+				if (obj1.name > obj2.name) {
+					return 1;
+				}
+				return 0;
+			}
+		</script>
+
+    </body> 
+</html>
