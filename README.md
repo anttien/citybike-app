@@ -1,4 +1,4 @@
-# Bike station app
+# Citybike app
 
 Bike station app is an open source-based mashup map app providing citybike station and weather information with routing from over 600 cities around the world. 
 
