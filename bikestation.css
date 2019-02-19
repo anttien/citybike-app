@@ -21,6 +21,19 @@
    width: 300px;
 }
 
+table#weather {
+   width: 200px;
+   color: #fff;
+   border: 1px solid black;
+   font-weight: bold;
+}
+
+
+table#weather #weatherImg {
+	width: 50px;
+	height: 50px;
+}
+
 select option {
    color: #fff;
    background-color: #3b8ec2;

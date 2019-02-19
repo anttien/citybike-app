@@ -33,6 +33,12 @@
 					</div>
 				</td>
 			</tr>
+			<tr>
+				<td>
+					<table class="blue semi-square" id="weather">
+					</table>
+				</td>
+			</tr>
 		</table>
 		
 		
@@ -116,16 +122,76 @@
 				}
 			}
 			
-			// The event listener of HTML city select object. If city is selected, fetch and show all the city's stations.
+			// The event listener of HTML city select object. If a city is selected, fetch and show all the city's stations.
 			function citySelectOnChangeFunction(cityName) {
 				for (city in cities) {
 					if(cities[city].name === cityName) {
 						console.log(cityName + ', ' + cities[city].country);
 						removeMarkers();
+						document.getElementById('weather').innerHTML = ""; // Clear the weather HTML table
 						initStations(cities[city].endpointUrl);
+						initWeather(cities[city].lat, cities[city].long);
 						return;
 					}
 				}
+			}
+			
+			// Fetch and show the weather
+			function initWeather(lat, long) {
+				var url = "https://api.openweathermap.org/data/2.5/weather?lat="+lat+"&lon="+long+"&APPID=114332134ea7ed53cb7a0e88a863eb5d";
+				getWeather(url);
+			}
+			
+			// Request the weather info from api.openweathermap.org
+			function getWeather(url) {			
+				var xmlhttp = new XMLHttpRequest();
+				xmlhttp.onreadystatechange = function() {    
+					if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {        
+						var weatherJson = JSON.parse(xmlhttp.responseText);        
+						showWeather(weatherJson);
+					} 
+				}
+				xmlhttp.open("GET", url, true); 
+				xmlhttp.send();
+			}
+			
+			// Parse weather JSON and show in HTML
+			function showWeather(weatherJson) {
+				var description = weatherJson.weather[0].description;
+				var icon = weatherJson.weather[0].icon;
+				var iconUrl = "http://openweathermap.org/img/w/" + icon + ".png"
+				var temperature = weatherJson.main.temp;
+				var cityName = weatherJson.name;
+				var country = weatherJson.sys.country;
+				
+				console.log(iconUrl);
+				// Change kelvin to celsius
+				temperature -= 273.15;
+				temperature = temperature.toFixed(1);
+				
+				description = description.charAt(0).toUpperCase() + description.slice(1);
+				var table = document.getElementById('weather');
+				var row = table.insertRow();
+				var cell = row.insertCell();
+				cell.colSpan = "2";
+				cell.innerHTML = "Weather in " + cityName + ", " + country;				
+				var row = table.insertRow();
+				var cell = row.insertCell();
+				cell.id = "weatherImg";
+				var x = document.createElement("IMG");
+				x.setAttribute("src", iconUrl);
+				//x.setAttribute("width", "304");
+				//x.setAttribute("height", "228");
+				x.setAttribute("alt", "weather icon");
+				cell.appendChild(x);
+				var cell = row.insertCell();
+				cell.innerHTML = temperature + " °C";				
+				var row = table.insertRow();
+				var cell = row.insertCell();
+				cell.innerHTML = description;
+				var row = table.insertRow();
+				cell.colSpan = "2";
+	
 			}
 			
 			// The event listener of HTML station select object. If a station is selected, show more info of the station.
