@@ -2,14 +2,12 @@
 <html> 
     <head> 
         <meta charset="utf-8" />
-		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"
-			integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
-			crossorigin="anonymous"/>
+		<link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"/>
 		<link rel="stylesheet" href="bikestation.css"/>
-        <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"
-			integrity="sha512-QVftwZFqvtRNi0ZyCtsznlKSWOStnDORoefr1enyq5mVL4tmKB3S/EnC3rRJcxCPavG10IcrVGSmPh6Qw5lwrg=="
-			crossorigin="anonymous"></script>
-		<title>Bike station app</title> 
+		<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+        <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"></script>
+		<script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+		<title>Citybike app</title> 
     </head> 
     <body>		
 		<div id="map"></div>
@@ -45,8 +43,12 @@
 		<script>
 			var cities = [];  // Contains all the city objects 
 			var stations = []; // Contains all the station objects
-			var markers = []; // Contains all the marker objects			
+			var markers = []; // Contains all the marker objects	
+			var map	= ""; // The Leaflet L.map object
 			initMap();
+			var control = L.Routing.control({
+				waypoints: [null]
+			}).addTo(map); // Initializing the leaflet routing machine control: https://gis.stackexchange.com/questions/186748/leaflet-routing-machine-how-to-initialise-map-without-waypoints-loaded
 			initCities("https://api.citybik.es/v2/networks/");
 			
 			// Add options controls on top of the map. Source: https://stackoverflow.com/questions/20790045/how-to-precisely-place-a-div-element-on-a-map-using-leaflet-js/38164780
@@ -124,6 +126,7 @@
 			
 			// The event listener of HTML city select object. If a city is selected, fetch and show all the city's stations.
 			function citySelectOnChangeFunction(cityName) {
+				control.setWaypoints([null]); // Set the routing waypoints to null when city is changed
 				for (city in cities) {
 					if(cities[city].name === cityName) {
 						console.log(cityName + ', ' + cities[city].country);
@@ -155,7 +158,7 @@
 				xmlhttp.send();
 			}
 			
-			// Parse weather JSON and show in HTML
+			// Parse weather JSON and show it in HTML
 			function showWeather(weatherJson) {
 				var description = weatherJson.weather[0].description;
 				var icon = weatherJson.weather[0].icon;
@@ -292,10 +295,14 @@
 				defaultOption.setAttribute("selected", "");
 			}
 			
+
+
 			// Draws all the stations as markers to the map
 			function drawStationMarkersToMap() {
 				for (station in stations) {
 					var marker = new L.marker([stations[station].lat, stations[station].long]);
+					
+					
 					var popup = L.popup({
 						closeOnClick:false,
 						autoClose:false
@@ -303,6 +310,7 @@
 									"Free bikes: " + stations[station].freeBikes + "<br>" +
 									"Empty slots: " + stations[station].emptySlots + "<br>" +
 									"Company: " + stations[station].company);
+
 					marker.bindPopup(popup);
 					marker.on('mouseover', function (e) {
 						this.openPopup();
@@ -311,7 +319,26 @@
 						this.closePopup();
 					});
 					marker.on('click', function(e){
-						map.setView(e.latlng);
+						// map.setView(e.latlng);
+						var container = L.DomUtil.create('div', 'blue'),
+						startBtn = createButton('Start from this location', container),
+						destBtn = createButton('Go to this location', container);
+
+						L.popup()
+							.setContent(container)
+							.setLatLng(e.latlng)
+							.openOn(map);
+						
+						L.DomEvent.on(startBtn, 'click', function() {
+							control.spliceWaypoints(0, 1, e.latlng);
+							map.closePopup();
+						});
+						
+						L.DomEvent.on(destBtn, 'click', function() {
+							control.spliceWaypoints(control.getWaypoints().length - 1, 1, e.latlng);
+							map.closePopup();
+						});
+						
 					});
 					markers.push(marker);
 					map.addLayer(marker);
@@ -340,6 +367,41 @@
 				}
 				return 0;
 			}
+			
+			// Leaflet routing: http://www.liedman.net/leaflet-routing-machine/tutorials/interaction/
+			// Create button for routing and attach it to a container
+			function createButton(label, container) {
+				var btn = L.DomUtil.create('button', '', container);
+				btn.setAttribute('type', 'button');
+				btn.innerHTML = label;
+				return btn;
+			}
+			
+			// Event listener for mapclick: Create a routing popup
+			map.on('click', function(e) {
+				var container = L.DomUtil.create('div'),
+					startBtn = createButton('Start from this location', container),
+					destBtn = createButton('Go to this location', container);
+
+				L.popup()
+					.setContent(container)
+					.setLatLng(e.latlng)
+					.openOn(map);
+				
+				L.DomEvent.on(startBtn, 'click', function() {
+					control.spliceWaypoints(0, 1, e.latlng);
+					map.closePopup();
+				});
+				
+				L.DomEvent.on(destBtn, 'click', function() {
+					control.spliceWaypoints(control.getWaypoints().length - 1, 1, e.latlng);
+					map.closePopup();
+				});
+			});
+			
+
+			
+
 		</script>
 
     </body> 

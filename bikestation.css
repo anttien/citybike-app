@@ -62,3 +62,7 @@ optionsTable {
 
 /* -------------------- Colors: Text */
 .blue select    { color: #fff; }
+
+.leaflet-popup-content-wrapper {
+  background-color: #3b8ec2
+}
